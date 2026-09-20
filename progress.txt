@@ -1,0 +1,59 @@
+---- Stage 1 : Project Setup + Dataset Preparation ----
+
+1. intialize uv package manager
+    `uv init`
+2. create project folders by running setup.py
+    `uv run python setup.py`
+3. Add basic packages
+    `uv add datasets pandas tqdm`
+    uv.lock file will be created
+4. download 'ai4privacy' dataset
+    `uv run python src/data/inspect_dataset.py`
+    inspects the first example and prints column names to understand the schema
+
+5. prepare the dataset splits
+    `uv run python src/data/prepare_dataset.py`
+    - pulls from ai4privacy/pii-masking-openpii-1m (HuggingFace)
+    - filters English only, shuffled with seed=42
+    - train/val come from official train split (no overlap), test from validation split
+    - validates every span: text[start:end] must equal value, raises on mismatch
+    - saves to data/processed/ as train.jsonl (25k), validation.jsonl (2k), test.jsonl (3k)
+    - asserts no UID overlap across splits
+
+
+---- Stage 2 : Baseline Qwen3-4B Evaluation ----
+
+1. add Modal (gpu provider)
+    `uv add modal`
+    `uv run modal setup`  then authenticate in browser
+
+2. write evaluation/baseline_modal.py
+    - Modal app: privacyguard-baseline
+    - image built from nvidia/cuda:12.9.0-devel-ubuntu22.04, installs vllm==0.21.0
+    - model Qwen/Qwen3-4B pinned to revision 1cfa9a7, downloaded into image at build time
+    - test.jsonl baked into the image so it travels with the container
+    - runs on L4 GPU, bfloat16, max_model_len=4096, max_new_tokens=384
+    - thinking disabled via chat_template_kwargs={"enable_thinking": False}
+    - prefix caching enabled (all samples share the same system prompt)
+    - response parsed with 3-tier fallback: strict JSON → markdown block → brace extraction
+    - entities aligned back to source text to get start/end offsets
+    - only accepts the 19 OpenPII label types, anything else is dropped
+
+3. write evaluation/metrics.py
+    - strict exact-span evaluation: (start, end, type) must all match
+    - reports precision, recall, F1, F2 (β=2, recall-weighted), pii_leakage_rate, over_redaction_rate, json_validity
+
+4. run baseline on full 3000 test samples
+    `uv run modal run evaluation/baseline_modal.py --limit 3000`
+    saves results/baseline_predictions.jsonl and results/baseline_metrics.json
+
+    Results (Qwen3-4B zero-shot, no fine-tuning):
+        precision        : 0.7207
+        recall           : 0.6280
+        f1               : 0.6712
+        f2               : 0.6446
+        pii_leakage_rate : 0.3720   ← 37% of real PII missed
+        over_redaction   : 0.2793
+        json_validity    : 0.8997
+        TP / FP / FN     : 14955 / 5796 / 8859
+        generation       : 286s @ 10.5 samples/s, 1118 tok/s
