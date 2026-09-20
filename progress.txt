@@ -57,3 +57,35 @@
         json_validity    : 0.8997
         TP / FP / FN     : 14955 / 5796 / 8859
         generation       : 286s @ 10.5 samples/s, 1118 tok/s
+
+
+---- Stage 3 : QLoRA Fine-Tuning Qwen3-4B ----
+
+1. create training script
+    `training/train_modal.py`
+    - use Qwen3-4B with 4-bit NF4 QLoRA
+    - LoRA rank=16, alpha=32, dropout=0.05
+    - use W&B for tracking and Modal L4 for training
+
+2. prepare training setup
+    - train on 25k samples, validate on 2k samples
+    - max length=2048
+    - learning rate=2e-4
+    - micro batch=1, gradient accumulation=8
+    - train for 1 epoch
+
+3. test training setup
+    `uv run modal run training/train_modal.py`
+    - run small smoke tests
+    - compare batch sizes and memory usage
+    - keep micro batch=1 with gradient checkpointing disabled
+
+4. run full fine-tuning
+    `uv run modal run --detach training/train_modal.py --no-smoke-test --repo-id rohitkmr8527/privacyguard-qwen3-4b-qlora`
+    - train for 3125 optimizer steps
+    - complete training in around 4.5 hours
+    - save checkpoints in persistent Modal Volume
+
+5. save trained LoRA adapter
+    `rohitkmr8527/privacyguard-qwen3-4b-qlora`
+    - final adapter uploaded to HuggingFace

@@ -13,14 +13,7 @@ import modal
 # =========================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-LOCAL_TEST_FILE = (
-    PROJECT_ROOT
-    / "data"
-    / "processed"
-    / "test.jsonl"
-)
-
+LOCAL_TEST_FILE = PROJECT_ROOT / "data" / "processed" / "test.jsonl"
 REMOTE_TEST_FILE = "/data/test.jsonl"
 
 MODEL_NAME = "Qwen/Qwen3-4B"
@@ -33,7 +26,6 @@ MODEL_DIR = "/models/qwen3-4b"
 
 MAX_MODEL_LEN = 4096
 MAX_NEW_TOKENS = 384
-
 GPU_MEMORY_UTILIZATION = 0.88
 
 
@@ -41,29 +33,12 @@ GPU_MEMORY_UTILIZATION = 0.88
 # OpenPII taxonomy
 # =========================================================
 
-ALLOWED_TYPES = frozenset(
-    {
-        "DATE",
-        "GIVENNAME",
-        "SURNAME",
-        "EMAIL",
-        "CITY",
-        "TITLE",
-        "TELEPHONENUM",
-        "AGE",
-        "STREET",
-        "BUILDINGNUM",
-        "ZIPCODE",
-        "IDCARDNUM",
-        "CREDITCARDNUMBER",
-        "DRIVERLICENSENUM",
-        "GENDER",
-        "TAXNUM",
-        "SEX",
-        "SOCIALNUM",
-        "PASSPORTNUM",
-    }
-)
+ALLOWED_TYPES = frozenset({
+    "DATE", "GIVENNAME", "SURNAME", "EMAIL", "CITY", "TITLE",
+    "TELEPHONENUM", "AGE", "STREET", "BUILDINGNUM", "ZIPCODE",
+    "IDCARDNUM", "CREDITCARDNUMBER", "DRIVERLICENSENUM", "GENDER",
+    "TAXNUM", "SEX", "SOCIALNUM", "PASSPORTNUM",
+})
 
 
 # =========================================================
@@ -136,7 +111,7 @@ hf_secret = modal.Secret.from_dotenv(PROJECT_ROOT, filename=".env")
 def download_model(model_name: str, revision: str, target_dir: str):
     import os
     from huggingface_hub import snapshot_download
-    print(f"Downloading {model_name} " f"revision={revision}")
+    print(f"Downloading {model_name} revision={revision}")
     snapshot_download(
         repo_id=model_name,
         revision=revision,
@@ -147,18 +122,10 @@ def download_model(model_name: str, revision: str, target_dir: str):
 
 
 image = (
-    modal.Image.from_registry(
-        "nvidia/cuda:12.9.0-devel-ubuntu22.04",
-        add_python="3.12",
-    )
+    modal.Image.from_registry("nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12")
     .entrypoint([])
     .uv_pip_install("vllm==0.21.0")
-    .env(
-        {
-            "TOKENIZERS_PARALLELISM": "false",
-            "HF_HUB_DISABLE_TELEMETRY": "1",
-        }
-    )
+    .env({"TOKENIZERS_PARALLELISM": "false", "HF_HUB_DISABLE_TELEMETRY": "1"})
     .run_function(
         download_model,
         args=(MODEL_NAME, MODEL_REVISION, MODEL_DIR),
@@ -284,14 +251,7 @@ def align_entities_to_text(source_text: str, predicted_entities: list):
             key = start, end, label
             if key not in used_spans:
                 used_spans.add(key)
-                aligned.append(
-                    {
-                        "text": value,
-                        "type": label,
-                        "start": start,
-                        "end": end,
-                    }
-                )
+                aligned.append({"text": value, "type": label, "start": start, "end": end})
                 break
             position = source_text.find(value, position + 1)
     return aligned
@@ -302,12 +262,8 @@ def align_entities_to_text(source_text: str, predicted_entities: list):
 # =========================================================
 
 def load_samples(path: str, limit: int):
-
     samples = []
-    with Path(path).open(
-        "r",
-        encoding="utf-8",
-    ) as file:
+    with Path(path).open("r", encoding="utf-8") as file:
         for line_number, line in enumerate(file, start=1):
             if len(samples) >= limit:
                 break
@@ -316,21 +272,10 @@ def load_samples(path: str, limit: int):
             try:
                 sample = json.loads(line)
             except json.JSONDecodeError as exc:
-                raise ValueError(f"Invalid JSON " f"on line {line_number}") from exc
-            missing = (
-                {
-                    "uid",
-                    "text",
-                    "entities",
-                }
-                - set(sample)
-            )
+                raise ValueError(f"Invalid JSON on line {line_number}") from exc
+            missing = {"uid", "text", "entities"} - set(sample)
             if missing:
-                raise ValueError(
-                    f"Missing fields on "
-                    f"line {line_number}: "
-                    f"{sorted(missing)}"
-                )
+                raise ValueError(f"Missing fields on line {line_number}: {sorted(missing)}")
             samples.append(sample)
     if not samples:
         raise ValueError("No test samples loaded.")
@@ -353,16 +298,13 @@ def run_baseline(limit: int = 100):
     # -----------------------------------------------------
 
     samples = load_samples(REMOTE_TEST_FILE, limit)
-    print(f"\nLoaded " f"{len(samples)} " f"evaluation samples.")
+    print(f"\nLoaded {len(samples)} evaluation samples.")
 
     # -----------------------------------------------------
     # Initialize vLLM
     # -----------------------------------------------------
 
-    print(
-        "\nLoading Qwen3-4B "
-        "with vLLM..."
-    )
+    print("\nLoading Qwen3-4B with vLLM...")
     load_start = time.perf_counter()
     llm = LLM(
 
@@ -380,7 +322,7 @@ def run_baseline(limit: int = 100):
         trust_remote_code=False,
     )
     model_load_seconds = time.perf_counter() - load_start
-    print(f"Model ready in " f"{model_load_seconds:.2f}s")
+    print(f"Model ready in {model_load_seconds:.2f}s")
 
     # -----------------------------------------------------
     # Construct ALL conversations first
@@ -388,22 +330,10 @@ def run_baseline(limit: int = 100):
 
     conversations = []
     for sample in samples:
-        conversations.append(
-            [
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Extract all PII "
-                        "from this text:\n\n"
-                        + sample["text"]
-                    ),
-                },
-            ]
-        )
+        conversations.append([
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": "Extract all PII from this text:\n\n" + sample["text"]},
+        ])
 
     # -----------------------------------------------------
     # Deterministic decoding
@@ -415,10 +345,7 @@ def run_baseline(limit: int = 100):
     # vLLM batch inference
     # -----------------------------------------------------
 
-    print(
-        "\nStarting vLLM "
-        "batch inference..."
-    )
+    print("\nStarting vLLM batch inference...")
     generation_start = time.perf_counter()
     outputs = llm.chat(
         conversations,
@@ -452,29 +379,22 @@ def run_baseline(limit: int = 100):
         if recovered_json:
             recovered_count += 1
         predicted_entities = align_entities_to_text(sample["text"], raw_entities)
-        results.append(
-            {
-                "uid": sample["uid"],
-                "gold_entities": sample["entities"],
-                "predicted_entities": predicted_entities,
-                "valid_json": valid_json,
-                "recovered_json": recovered_json,
-                "finish_reason": finish_reason,
-                "raw_response": response,
-            }
-        )
+        results.append({
+            "uid": sample["uid"],
+            "gold_entities": sample["entities"],
+            "predicted_entities": predicted_entities,
+            "valid_json": valid_json,
+            "recovered_json": recovered_json,
+            "finish_reason": finish_reason,
+            "raw_response": response,
+        })
 
     # -----------------------------------------------------
     # Speed stats
     # -----------------------------------------------------
 
     samples_per_second = len(samples) / generation_seconds
-    output_tokens_per_second = (
-        total_output_tokens
-        / generation_seconds
-        if generation_seconds
-        else 0
-    )
+    output_tokens_per_second = total_output_tokens / generation_seconds if generation_seconds else 0
     stats = {
         "sample_count": len(samples),
         "model_load_seconds": model_load_seconds,
@@ -487,10 +407,7 @@ def run_baseline(limit: int = 100):
     }
     print("\nRemote timing:")
     print(json.dumps(stats, indent=2))
-    return {
-        "results": results,
-        "stats": stats,
-    }
+    return {"results": results, "stats": stats}
 
 
 # =========================================================
@@ -519,10 +436,7 @@ def main(limit: int = 100):
     # -----------------------------------------------------
 
     predictions_file = results_dir / "baseline_predictions.jsonl"
-    with predictions_file.open(
-        "w",
-        encoding="utf-8",
-    ) as file:
+    with predictions_file.open("w", encoding="utf-8") as file:
         for row in results:
             file.write(json.dumps(row, ensure_ascii=False) + "\n")
 
@@ -542,10 +456,7 @@ def main(limit: int = 100):
     # -----------------------------------------------------
 
     metrics_file = results_dir / "baseline_metrics.json"
-    with metrics_file.open(
-        "w",
-        encoding="utf-8",
-    ) as file:
+    with metrics_file.open("w", encoding="utf-8") as file:
         json.dump(
             {
                 "metrics": metrics,
@@ -568,25 +479,22 @@ def main(limit: int = 100):
     # Console report
     # -----------------------------------------------------
 
-
     print("\n" + "=" * 56)
-    print("              "
-        "BASELINE EVALUATION"
-    )
+    print("              BASELINE EVALUATION")
     print("=" * 56)
     for key, value in metrics.items():
         if isinstance(value, float):
-            print(f"  " f"{key:26s}: " f"{value:.4f}")
+            print(f"  {key:26s}: {value:.4f}")
         else:
-            print(f"  " f"{key:26s}: " f"{value}")
+            print(f"  {key:26s}: {value}")
     print("-" * 56)
-    print(f"  generation_seconds        : " f"{stats['generation_seconds']:.2f}")
-    print(f"  samples_per_second        : " f"{stats['samples_per_second']:.3f}")
-    print(f"  output_tokens_per_second  : " f"{stats['output_tokens_per_second']:.2f}")
-    print(f"  model_load_seconds        : " f"{stats['model_load_seconds']:.2f}")
-    print(f"  round_trip_seconds        : " f"{stats['total_round_trip_seconds']:.2f}")
-    print(f"  recovered_json            : " f"{stats['recovered_json_count']}")
-    print(f"  finish_reasons            : " f"{stats['finish_reasons']}")
+    print(f"  generation_seconds        : {stats['generation_seconds']:.2f}")
+    print(f"  samples_per_second        : {stats['samples_per_second']:.3f}")
+    print(f"  output_tokens_per_second  : {stats['output_tokens_per_second']:.2f}")
+    print(f"  model_load_seconds        : {stats['model_load_seconds']:.2f}")
+    print(f"  round_trip_seconds        : {stats['total_round_trip_seconds']:.2f}")
+    print(f"  recovered_json            : {stats['recovered_json_count']}")
+    print(f"  finish_reasons            : {stats['finish_reasons']}")
     print("=" * 56)
-    print(f"\nPredictions -> " f"{predictions_file}")
-    print(f"Metrics     -> " f"{metrics_file}")
+    print(f"\nPredictions -> {predictions_file}")
+    print(f"Metrics     -> {metrics_file}")
