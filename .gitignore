@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environment
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.*
+
+# Dataset files
+data/raw/*
+data/processed/*
+
+# Keep directories
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Model artifacts
+*.safetensors
+*.bin
+*.pt
+*.pth
+checkpoints/
+models/
+
+# Evaluation artifacts
+results/*.json
+results/*.jsonl
+results/*.csv
+
+# W&B
+wandb/
