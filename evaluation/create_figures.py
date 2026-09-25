@@ -2,7 +2,17 @@ import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 
+
+# Set better default styling
+mpl.rcParams['font.family'] = 'sans-serif'
+mpl.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans']
+mpl.rcParams['axes.labelsize'] = 11
+mpl.rcParams['axes.titlesize'] = 13
+mpl.rcParams['xtick.labelsize'] = 10
+mpl.rcParams['ytick.labelsize'] = 10
+mpl.rcParams['legend.fontsize'] = 10
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -18,6 +28,11 @@ GENERALIZATION_FILE = (
     / "generalization_summary.json"
 )
 
+# Color scheme
+BASE_COLOR = '#e74c3c'      # Red for base model
+FINETUNED_COLOR = '#3498db'  # Blue for fine-tuned model
+ENTITY_COLOR = '#2ecc71'     # Green for entity bars
+
 
 def load_json(path: Path):
     if not path.is_file():
@@ -31,21 +46,23 @@ def metric_block(payload):
     return payload.get("metrics", payload)
 
 
-def add_value_labels(ax, bars, decimals=3):
+def add_value_labels(ax, bars, decimals=3, fontsize=9):
+    """Add value labels on top of bars."""
     for bar in bars:
         height = bar.get_height()
-
         ax.text(
             bar.get_x() + bar.get_width() / 2,
-            height,
+            height + 0.01,  # Small offset above bar
             f"{height:.{decimals}f}",
             ha="center",
             va="bottom",
-            fontsize=9,
+            fontsize=fontsize,
+            fontweight='bold',
         )
 
 
 def save_openpii_comparison(base, finetuned):
+    """Create comparison chart for OpenPII metrics."""
     metrics = [
         "precision",
         "recall",
@@ -56,8 +73,8 @@ def save_openpii_comparison(base, finetuned):
     labels = [
         "Precision",
         "Recall",
-        "F1",
-        "F2",
+        "F1 Score",
+        "F2 Score",
     ]
 
     base_values = [
@@ -71,17 +88,25 @@ def save_openpii_comparison(base, finetuned):
     ]
 
     x = list(range(len(labels)))
-    width = 0.36
+    width = 0.35
 
     fig, ax = plt.subplots(
-        figsize=(9, 5)
+        figsize=(10, 6)
     )
+    
+    # Add grid for easier reading
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
 
     base_bars = ax.bar(
         [value - width / 2 for value in x],
         base_values,
         width,
         label="Base Qwen3-4B",
+        color=BASE_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     finetuned_bars = ax.bar(
@@ -89,25 +114,32 @@ def save_openpii_comparison(base, finetuned):
         finetuned_values,
         width,
         label="Fine-tuned Qwen3-4B",
+        color=FINETUNED_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     ax.set_title(
-        "OpenPII: Base vs Fine-tuned Performance"
+        "OpenPII: Base vs Fine-tuned Performance",
+        fontsize=14,
+        fontweight='bold',
+        pad=20,
     )
-    ax.set_ylabel("Score")
-    ax.set_ylim(0, 1.08)
+    ax.set_ylabel("Score", fontsize=12, fontweight='bold')
+    ax.set_ylim(0, 1.1)
     ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    ax.legend()
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.legend(loc='upper right', framealpha=0.9)
 
-    add_value_labels(ax, base_bars)
-    add_value_labels(ax, finetuned_bars)
+    add_value_labels(ax, base_bars, fontsize=8)
+    add_value_labels(ax, finetuned_bars, fontsize=8)
 
     fig.tight_layout()
     fig.savefig(
         FIGURES_DIR
         / "openpii_model_comparison.png",
-        dpi=200,
+        dpi=300,
         bbox_inches="tight",
     )
     plt.close(fig)
@@ -117,6 +149,7 @@ def save_privacy_risk_comparison(
     base,
     finetuned,
 ):
+    """Create comparison chart for privacy risk metrics."""
     metrics = [
         "pii_leakage_rate",
         "over_redaction_rate",
@@ -138,17 +171,25 @@ def save_privacy_risk_comparison(
     ]
 
     x = list(range(len(labels)))
-    width = 0.36
+    width = 0.35
 
     fig, ax = plt.subplots(
-        figsize=(8, 5)
+        figsize=(9, 6)
     )
+    
+    # Add grid for easier reading
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
 
     base_bars = ax.bar(
         [value - width / 2 for value in x],
         base_values,
         width,
         label="Base Qwen3-4B",
+        color=BASE_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     finetuned_bars = ax.bar(
@@ -156,32 +197,39 @@ def save_privacy_risk_comparison(
         finetuned_values,
         width,
         label="Fine-tuned Qwen3-4B",
+        color=FINETUNED_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     ax.set_title(
-        "OpenPII: Privacy Error Rates"
+        "OpenPII: Privacy Error Rates (Lower is Better)",
+        fontsize=14,
+        fontweight='bold',
+        pad=20,
     )
-    ax.set_ylabel("Rate")
+    ax.set_ylabel("Error Rate", fontsize=12, fontweight='bold')
     ax.set_ylim(
         0,
         max(
             max(base_values),
             max(finetuned_values),
         )
-        * 1.25,
+        * 1.3,
     )
     ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    ax.legend()
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.legend(loc='upper right', framealpha=0.9)
 
-    add_value_labels(ax, base_bars)
-    add_value_labels(ax, finetuned_bars)
+    add_value_labels(ax, base_bars, fontsize=8)
+    add_value_labels(ax, finetuned_bars, fontsize=8)
 
     fig.tight_layout()
     fig.savefig(
         FIGURES_DIR
         / "openpii_privacy_error_rates.png",
-        dpi=200,
+        dpi=300,
         bbox_inches="tight",
     )
     plt.close(fig)
@@ -192,6 +240,7 @@ def save_generalization_f1(
     finetuned_openpii,
     generalization,
 ):
+    """Create F1 comparison across benchmarks."""
     datasets = [
         "OpenPII",
         "Gretel",
@@ -219,17 +268,25 @@ def save_generalization_f1(
     ]
 
     x = list(range(len(datasets)))
-    width = 0.36
+    width = 0.35
 
     fig, ax = plt.subplots(
-        figsize=(9, 5)
+        figsize=(10, 6)
     )
+    
+    # Add grid for easier reading
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
 
     base_bars = ax.bar(
         [value - width / 2 for value in x],
         base_values,
         width,
         label="Base Qwen3-4B",
+        color=BASE_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     finetuned_bars = ax.bar(
@@ -237,25 +294,32 @@ def save_generalization_f1(
         finetuned_values,
         width,
         label="Fine-tuned Qwen3-4B",
+        color=FINETUNED_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     ax.set_title(
-        "Generalization: F1 Across Benchmarks"
+        "Generalization: F1 Score Across Benchmarks",
+        fontsize=14,
+        fontweight='bold',
+        pad=20,
     )
-    ax.set_ylabel("F1")
-    ax.set_ylim(0, 1.08)
+    ax.set_ylabel("F1 Score", fontsize=12, fontweight='bold')
+    ax.set_ylim(0, 1.1)
     ax.set_xticks(x)
-    ax.set_xticklabels(datasets)
-    ax.legend()
+    ax.set_xticklabels(datasets, fontsize=11)
+    ax.legend(loc='upper right', framealpha=0.9)
 
-    add_value_labels(ax, base_bars)
-    add_value_labels(ax, finetuned_bars)
+    add_value_labels(ax, base_bars, fontsize=8)
+    add_value_labels(ax, finetuned_bars, fontsize=8)
 
     fig.tight_layout()
     fig.savefig(
         FIGURES_DIR
         / "generalization_f1.png",
-        dpi=200,
+        dpi=300,
         bbox_inches="tight",
     )
     plt.close(fig)
@@ -266,6 +330,7 @@ def save_generalization_recall(
     finetuned_openpii,
     generalization,
 ):
+    """Create recall comparison across benchmarks."""
     datasets = [
         "OpenPII",
         "Gretel",
@@ -293,17 +358,25 @@ def save_generalization_recall(
     ]
 
     x = list(range(len(datasets)))
-    width = 0.36
+    width = 0.35
 
     fig, ax = plt.subplots(
-        figsize=(9, 5)
+        figsize=(10, 6)
     )
+    
+    # Add grid for easier reading
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
 
     base_bars = ax.bar(
         [value - width / 2 for value in x],
         base_values,
         width,
         label="Base Qwen3-4B",
+        color=BASE_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     finetuned_bars = ax.bar(
@@ -311,31 +384,39 @@ def save_generalization_recall(
         finetuned_values,
         width,
         label="Fine-tuned Qwen3-4B",
+        color=FINETUNED_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     ax.set_title(
-        "Generalization: Recall Across Benchmarks"
+        "Generalization: Recall Across Benchmarks",
+        fontsize=14,
+        fontweight='bold',
+        pad=20,
     )
-    ax.set_ylabel("Recall")
-    ax.set_ylim(0, 1.08)
+    ax.set_ylabel("Recall", fontsize=12, fontweight='bold')
+    ax.set_ylim(0, 1.1)
     ax.set_xticks(x)
-    ax.set_xticklabels(datasets)
-    ax.legend()
+    ax.set_xticklabels(datasets, fontsize=11)
+    ax.legend(loc='upper right', framealpha=0.9)
 
-    add_value_labels(ax, base_bars)
-    add_value_labels(ax, finetuned_bars)
+    add_value_labels(ax, base_bars, fontsize=8)
+    add_value_labels(ax, finetuned_bars, fontsize=8)
 
     fig.tight_layout()
     fig.savefig(
         FIGURES_DIR
         / "generalization_recall.png",
-        dpi=200,
+        dpi=300,
         bbox_inches="tight",
     )
     plt.close(fig)
 
 
 def save_entity_f1(entity_metrics):
+    """Create horizontal bar chart for entity-level F1 scores."""
     by_entity = (
         entity_metrics[
             "finetuned"
@@ -366,37 +447,55 @@ def save_entity_f1(entity_metrics):
     ]
 
     fig, ax = plt.subplots(
-        figsize=(9, 8)
+        figsize=(10, 9)
     )
+    
+    # Add grid for easier reading
+    ax.grid(axis='x', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
 
     bars = ax.barh(
         labels,
         values,
+        color=ENTITY_COLOR,
+        alpha=0.8,
+        edgecolor='black',
+        linewidth=0.5,
     )
 
     ax.set_title(
-        "Fine-tuned OpenPII F1 by Entity Type"
+        "Fine-tuned Model: F1 Score by Entity Type",
+        fontsize=14,
+        fontweight='bold',
+        pad=20,
     )
-    ax.set_xlabel("F1")
-    ax.set_xlim(0, 1.05)
+    ax.set_xlabel("F1 Score", fontsize=12, fontweight='bold')
+    
+    # Set x-axis to start from 0.6 for better clarity
+    min_val = min(values) if values else 0.6
+    ax.set_xlim(max(0.6, min_val - 0.05), 1.05)
+    
+    # Improve y-axis labels
+    ax.tick_params(axis='y', labelsize=10)
+    ax.tick_params(axis='x', labelsize=10)
 
-    for bar in bars:
+    # Add value labels on bars
+    for bar, value in zip(bars, values):
         width = bar.get_width()
-
         ax.text(
-            width,
-            bar.get_y()
-            + bar.get_height() / 2,
-            f" {width:.3f}",
+            width + 0.005,
+            bar.get_y() + bar.get_height() / 2,
+            f"{value:.3f}",
             va="center",
-            fontsize=8,
+            fontsize=9,
+            fontweight='bold',
         )
 
     fig.tight_layout()
     fig.savefig(
         FIGURES_DIR
         / "finetuned_entity_f1.png",
-        dpi=200,
+        dpi=300,
         bbox_inches="tight",
     )
     plt.close(fig)
