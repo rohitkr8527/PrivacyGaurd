@@ -89,3 +89,94 @@
 5. save trained LoRA adapter
     `rohitkmr8527/privacyguard-qwen3-4b-qlora`
     - final adapter uploaded to HuggingFace
+
+
+---- Stage 4 : Fine-Tuned Model Evaluation ----
+
+1. create fine-tuned evaluation script
+    `evaluation/finetuned_modal.py`
+    - load Qwen3-4B with trained LoRA adapter
+    - use the same prompt, test data and metrics as baseline
+    - evaluate on the frozen 3000 test samples
+
+2. run full fine-tuned evaluation
+    `uv run modal run evaluation/finetuned_modal.py --limit 3000`
+
+    Results:
+        precision        : 0.9562
+        recall           : 0.9508
+        f1               : 0.9535
+        f2               : 0.9519
+        pii_leakage_rate : 0.0492
+        over_redaction   : 0.0438
+        json_validity    : 0.9983
+
+3. compare baseline and fine-tuned model
+    `uv run python evaluation/compare_results.py`
+    - saves results/baseline_vs_finetuned.json
+
+4. check train-test data leakage
+    `uv run python evaluation/audit_leakage.py`
+    - no UID or exact text overlap
+    - only 0.10% template overlap
+    - fine-tuned F1 on unseen templates remains 0.9535
+    - saves results/leakage_audit.json
+
+5. Stage 4 completed
+    - fine-tuned model shows large improvement over base Qwen3-4B
+    - no meaningful train-test leakage detected
+
+
+---- Stage 5 : Generalization Evaluation + Error Analysis ----
+
+1. analyze OpenPII prediction errors
+    `uv run python evaluation/error_analysis.py`
+    - calculate per-entity precision, recall and F1
+    - inspect false positives, false negatives and label confusion
+    - save results/entity_metrics.json
+    - save results/error_analysis.json
+
+2. prepare external benchmark datasets
+    `uv run python evaluation/prepare_external_benchmarks.py`
+    - use 1000 samples from Gretel official test split
+    - use 1000 samples from Nemotron-PII official test split
+    - map only compatible labels to PrivacyGuard taxonomy
+    - keep unsupported labels as ignored entities
+    - save reproducible dataset revisions and mapping manifest
+
+3. evaluate base and fine-tuned model externally
+    `uv run modal run evaluation/external_eval_modal.py`
+    - evaluate both models on Gretel and Nemotron
+    - use strict exact span + type metrics
+
+4. analyze generalization
+    `uv run python evaluation/analyze_external_results.py`
+
+    OpenPII:
+        base f1       : 0.6712
+        fine-tuned f1 : 0.9535
+
+    Gretel:
+        base f1       : 0.8477
+        fine-tuned f1 : 0.8560
+        recall        : 0.8515 -> 0.8921
+        leakage       : 0.1485 -> 0.1079
+
+    Nemotron:
+        base f1       : 0.7592
+        fine-tuned f1 : 0.8146
+        recall        : 0.6465 -> 0.7216
+        leakage       : 0.3535 -> 0.2784
+
+
+---- Stage 6 : PrivacyGuard Demo ----
+
+1. create Modal inference backend
+    `app/modal_inference.py`
+
+2. create Streamlit demo
+    `app/streamlit_app.py`
+
+3. run demo
+    `uv run modal deploy app/modal_inference.py`
+    `uv run streamlit run app/streamlit_app.py`

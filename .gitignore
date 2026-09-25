@@ -41,3 +41,10 @@ results/*.csv
 
 # W&B
 wandb/
+
+# Generated prediction artifacts
+results/*_predictions.jsonl
+results/**/*_predictions.jsonl
+
+# Generated external benchmark samples
+data/external/*.jsonl
