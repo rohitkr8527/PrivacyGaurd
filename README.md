@@ -1,126 +1,128 @@
 # PrivacyGuard
 
-**Fine-tuned Language Model for Personally Identifiable Information (PII) Detection and Redaction**
+**Fine-tuned Language Model for PII Detection and Redaction**
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Modal](https://img.shields.io/badge/cloud-Modal-blueviolet)](https://modal.com)
 [![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97-Model-yellow)](https://huggingface.co/rohitkmr8527/privacyguard-qwen3-4b-qlora)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+PrivacyGuard is a **Qwen3-4B** language model fine-tuned with **QLoRA** to detect and redact Personally Identifiable Information (PII) in text. It achieves a **95.4% F1 score** — a **+28.2 pp improvement** over the base model — while reducing PII leakage by **87%**.
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Problem Statement](#problem-statement)
+- [Key Results](#key-results)
 - [Architecture](#architecture)
-- [Dataset & Training Setup](#dataset--training-setup)
-- [Evaluation Methodology](#evaluation-methodology)
-- [Results](#results)
-  - [OpenPII Performance](#openpii-performance)
-  - [External Generalization](#external-generalization)
-  - [Entity-Level Analysis](#entity-level-analysis)
+- [Dataset & Training](#dataset--training)
+- [Evaluation](#evaluation)
 - [Demo Application](#demo-application)
 - [Installation & Setup](#installation--setup)
 - [Usage](#usage)
+- [Project Structure](#project-structure)
 - [Limitations](#limitations)
 - [Future Work](#future-work)
 - [License](#license)
+- [Acknowledgments](#acknowledgments)
 
 ---
 
-## Overview
+## Key Results
 
-PrivacyGuard is a fine-tuned **Qwen3-4B** language model specialized for detecting and redacting Personally Identifiable Information (PII) in text. The model uses **QLoRA** (Quantized Low-Rank Adaptation) fine-tuning to achieve high-performance PII detection while maintaining efficient inference.
+| Metric | Base Qwen3-4B | Fine-tuned | Δ |
+|--------|:---:|:---:|:---:|
+| **Precision** | 72.1% | **95.6%** | +23.5 pp |
+| **Recall** | 62.8% | **95.1%** | +32.3 pp |
+| **F1 Score** | 67.1% | **95.4%** | +28.2 pp |
+| **F2 Score** | 64.5% | **95.2%** | +30.7 pp |
+| **PII Leakage Rate** | 37.2% | **4.9%** | −32.3 pp |
+| **Over-redaction Rate** | 27.9% | **4.4%** | −23.6 pp |
+| **JSON Validity** | 90.0% | **99.8%** | +9.8 pp |
 
-**Key Features:**
-- 🎯 **High Accuracy**: 95.4% F1 score on OpenPII test set (vs 67.1% baseline)
-- 🔒 **Privacy-Focused**: 95% PII leakage rate reduction compared to base model
-- 🚀 **Fast Inference**: Powered by vLLM on Modal for efficient batch processing
-- 🌐 **Strong Generalization**: 84-81% F1 on external benchmarks (Gretel, Nemotron)
-- 📊 **18 Entity Types**: Names, emails, phone numbers, SSN, credit cards, and more
+**External Benchmark Generalisation:**
 
----
-
-## Problem Statement
-
-### Challenge
-
-Organizations handling user-generated content must identify and protect PII to comply with privacy regulations (GDPR, CCPA, HIPAA). Traditional rule-based systems struggle with:
-
-1. **Context-dependent PII**: Names, locations, and organizations require contextual understanding
-2. **Diverse formats**: Phone numbers, addresses, and dates appear in many formats
-3. **Implicit PII**: References like "my mother" or "CEO" that reveal identity
-4. **Multi-lingual content**: Global applications need robust multilingual support
-5. **High false positive cost**: Over-redaction reduces content utility
-
-### Solution
-
-PrivacyGuard leverages instruction-tuned LLMs to:
-- Understand contextual PII with natural language comprehension
-- Generate structured JSON output for downstream processing
-- Achieve high recall (detect most PII) while maintaining precision
-- Generalize to unseen data distributions and formats
+| Benchmark | Base F1 | Fine-tuned F1 | Δ |
+|-----------|:---:|:---:|:---:|
+| OpenPII (in-domain) | 67.1% | **95.4%** | +28.2 pp |
+| Gretel (synthetic) | 84.8% | **85.6%** | +0.8 pp |
+| Nemotron (synthetic) | 75.9% | **81.5%** | +5.5 pp |
 
 ---
 
 ## Architecture
 
-PrivacyGuard consists of three main components:
+PrivacyGuard is composed of four layers: **Data → Training → Evaluation → Application**.
 
-### 1. Training Pipeline
+```mermaid
+flowchart TD
+    subgraph DATA["Data Layer"]
+        D1["OpenPII Dataset\n(HuggingFace)"]
+        D2["Gretel Benchmark\n(1 000 samples)"]
+        D3["Nemotron Benchmark\n(1 000 samples)"]
+    end
 
+    subgraph TRAIN["Training Layer"]
+        T1["Modal GPU Cloud\ntrain_modal.py"]
+        T2["Qwen3-4B + QLoRA\nL4 · 24 GB"]
+        T3["LoRA Adapter\nHuggingFace Hub"]
+    end
+
+    subgraph MODEL["Model Layer"]
+        M1["Base Model\nQwen3-4B"]
+        M2["Fine-tuned Model\nQwen3-4B + LoRA"]
+    end
+
+    subgraph EVAL["Evaluation Layer"]
+        E1["Modal Inference\nvLLM · L4 GPU"]
+        E2["Metrics\nPrecision · Recall · F1 · Leakage"]
+    end
+
+    subgraph APP["Application Layer"]
+        A1["Streamlit UI"]
+        A2["Modal Serverless Inference"]
+    end
+
+    D1 --> T1 --> T2 --> T3 --> M2
+    D1 --> M1
+    M1 & M2 --> E1
+    D2 & D3 --> E1
+    E1 --> E2
+    M1 & M2 --> A2
+    A1 --> A2
 ```
-OpenPII Dataset → Data Preparation → QLoRA Fine-tuning (Modal A100) 
-                                   → LoRA Adapter (HuggingFace Hub)
+
+### Inference Data Flow
+
+```mermaid
+flowchart LR
+    IN["Raw Input Text"] --> PT["Prompt Construction"]
+    PT --> INF["Qwen3-4B + LoRA\nvLLM Inference"]
+    INF --> GEN["JSON Generation\n{entities, redacted}"]
+    GEN --> PP["Post-processing\nParse · Validate"]
+    PP --> OUT["Structured Output\nEntities + Redacted Text"]
 ```
 
-**Model**: Qwen3-4B (base)  
-**Fine-tuning**: QLoRA with rank-16 adapters  
-**Infrastructure**: Modal cloud GPU (A100 40GB)  
-**Training time**: ~3 hours for 3 epochs  
-
-### 2. Evaluation Pipeline
-
-```
-Test Data → Modal Inference (vLLM on L4 GPU) → Predictions → Metrics
-```
-
-**Benchmarks**:
-- OpenPII test split (3,000 samples)
-- Gretel synthetic benchmark (1,000 samples)
-- Nemotron synthetic benchmark (1,000 samples)
-
-### 3. Demo Application
-
-```
-Streamlit UI → Modal Serverless Inference → vLLM Engine → Results
-```
-
-**Interactive demo** for real-time PII detection with model comparison.
-
-📊 **Detailed Architecture Diagrams**: See [docs/architecture_diagrams.md](docs/architecture_diagrams.md)
+**Full architecture diagrams** (training pipeline, evaluation pipeline, QLoRA internals, module map): [`docs/architecture_diagrams.md`](docs/architecture_diagrams.md)
 
 ---
 
-## Dataset & Training Setup
+## Dataset & Training
 
 ### OpenPII Dataset
 
-- **Source**: [ai4privacy/OpenPII](https://huggingface.co/datasets/ai4privacy/OpenPII)
-- **Size**: 
-  - Training: 10,000 samples
-  - Validation: 1,000 samples
-  - Test: 3,000 samples
-- **Entity Types** (18): PERSON, EMAIL, PHONENUMBER, USERNAME, ACCOUNTNUMBER, SSN, DRIVERLICENSE, CREDITCARD, PASSPORT, IBAN, BITCOIN, IP_ADDRESS, URL, STREET_ADDRESS, CITY, STATE, ZIPCODE, DATE_OF_BIRTH
+- **Source**: [`ai4privacy/OpenPII`](https://huggingface.co/datasets/ai4privacy/OpenPII)
+- **Splits**: Train 10 000 / Validation 1 000 / Test 3 000
+- **Entity Types (18)**: `PERSON`, `EMAIL`, `PHONENUMBER`, `USERNAME`, `ACCOUNTNUMBER`, `SSN`, `DRIVERLICENSE`, `CREDITCARD`, `PASSPORT`, `IBAN`, `BITCOIN`, `IP_ADDRESS`, `URL`, `STREET_ADDRESS`, `CITY`, `STATE`, `ZIPCODE`, `DATE_OF_BIRTH`
 
 ### Instruction Format
 
-The model is trained to generate structured JSON output:
+The model is trained to produce structured JSON output:
 
 ```json
 {
   "entities": [
-    {"entity": "John Smith", "label": "PERSON"},
+    {"entity": "John Smith",       "label": "PERSON"},
     {"entity": "john@example.com", "label": "EMAIL"}
   ],
   "redacted": "{{PERSON}} can be reached at {{EMAIL}}"
@@ -131,164 +133,70 @@ The model is trained to generate structured JSON output:
 
 | Parameter | Value |
 |-----------|-------|
-| Base Model | Qwen/Qwen3-4B |
-| Method | QLoRA (4-bit quantization) |
+| Base Model | `Qwen/Qwen3-4B` |
+| Method | QLoRA (4-bit NF4 quantisation) |
 | LoRA Rank | 16 |
 | Target Modules | q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj |
-| Batch Size | 2 per device × 8 gradient accumulation = 16 effective |
+| Effective Batch Size | 16 (2 per device × 8 gradient accumulation steps) |
 | Learning Rate | 3e-4 |
-| Max Sequence Length | 2048 tokens |
+| Max Sequence Length | 2 048 tokens |
 | Epochs | 3 |
-| GPU | A100 (40GB) on Modal |
+| GPU | L4 (24 GB) on Modal |
 | Training Time | ~3 hours |
-| Optimizer | AdamW with paged_adamw_8bit |
-| Scheduler | Cosine with 0.03 warmup |
+| Optimiser | `paged_adamw_8bit` |
+| LR Scheduler | Cosine with 3% warmup |
 
-### Optimizations
-
-- ✅ Flash Attention 2
-- ✅ 4-bit NormalFloat quantization
-- ✅ bfloat16 compute dtype
-- ✅ Gradient checkpointing
-- ✅ Mixed precision training
+**Optimisations:** Flash Attention 2 · 4-bit NF4 quantisation · bfloat16 compute · gradient checkpointing · mixed-precision training
 
 ---
 
-## Evaluation Methodology
+## Evaluation
 
 ### Metrics
 
-1. **Detection Metrics**
-   - **Precision**: Fraction of detected entities that are correct
-   - **Recall**: Fraction of true PII entities detected
-   - **F1 Score**: Harmonic mean of precision and recall
-   - **F2 Score**: Weighted F-score favoring recall (β=2)
+| Category | Metrics |
+|----------|---------|
+| Detection | Precision, Recall, F1, F2 (recall-weighted, β=2) |
+| Privacy Risk | PII Leakage Rate (FN / total true), Over-redaction Rate (FP / total predicted) |
+| Output Quality | JSON Validity %, Entity-level F1 per type |
 
-2. **Privacy Risk Metrics**
-   - **PII Leakage Rate**: False negatives / Total true entities (missed PII)
-   - **Over-redaction Rate**: False positives / Total predicted entities
+### Inference Setup
 
-3. **Output Quality**
-   - **JSON Validity**: Percentage of valid JSON responses
-   - **Entity-level F1**: Per-entity-type performance breakdown
-
-### Evaluation Setup
-
-- **Inference Engine**: vLLM with Flash Attention 2
+- **Engine**: vLLM with Flash Attention 2
 - **GPU**: L4 (Modal cloud)
-- **Batch Processing**: Efficient batched generation
 - **Temperature**: 0.0 (deterministic)
 - **Max New Tokens**: 384
 
----
+### Entity-Level Performance (Fine-tuned)
 
-## Results
+**Top performers (F1 > 95%):**
+`CREDITCARD` 98.5% · `PHONENUMBER` 98.2% · `EMAIL` 97.8% · `ACCOUNTNUMBER` 97.4% · `SSN` 96.8% · `USERNAME` 96.3% · `PASSPORT` 95.7%
 
-### OpenPII Performance
-
-![OpenPII Model Comparison](results/figures/openpii_model_comparison.png)
-
-| Model | Precision | Recall | F1 | F2 | Leakage Rate | Over-redaction |
-|-------|-----------|--------|----|----|--------------|----------------|
-| **Base Qwen3-4B** | 72.1% | 62.8% | 67.1% | 64.5% | 37.2% | 27.9% |
-| **Fine-tuned** | **95.6%** | **95.1%** | **95.4%** | **95.2%** | **4.9%** | **4.4%** |
-| **Δ Improvement** | +23.5pp | +32.3pp | +28.2pp | +30.7pp | -32.3pp | -23.6pp |
-
-**Key Insights:**
-- ✅ **28.2pp F1 improvement** over base model
-- ✅ **32.3pp recall gain**: Detects significantly more PII
-- ✅ **87% reduction in PII leakage** (37.2% → 4.9%)
-- ✅ **84% reduction in over-redaction** (27.9% → 4.4%)
-- ✅ **99.8% JSON validity** (vs 90.0% baseline)
-
-### Privacy Risk Comparison
-
-![Privacy Error Rates](results/figures/openpii_privacy_error_rates.png)
-
-The fine-tuned model dramatically reduces both types of privacy errors:
-- **PII Leakage**: Missed PII that could expose user information
-- **Over-redaction**: Unnecessary redactions that reduce content utility
-
-### External Generalization
-
-Testing on out-of-distribution benchmarks to validate real-world robustness:
-
-#### F1 Score Across Benchmarks
-
-![Generalization F1](results/figures/generalization_f1.png)
-
-#### Recall Across Benchmarks
-
-![Generalization Recall](results/figures/generalization_recall.png)
-
-| Benchmark | Base Model F1 | Fine-tuned F1 | Improvement |
-|-----------|---------------|---------------|-------------|
-| **OpenPII** (in-domain) | 67.1% | **95.4%** | +28.2pp |
-| **Gretel** (synthetic) | 84.8% | **85.6%** | +0.8pp |
-| **Nemotron** (synthetic) | 75.9% | **81.5%** | +5.5pp |
-
-**Generalization Analysis:**
-- ✅ Strong performance on external benchmarks (81-86% F1)
-- ✅ Consistent improvement over base model across all datasets
-- ⚠️ Some performance degradation vs in-domain (expected)
-- ✅ Better recall on external data (+4-8pp), confirming reduced leakage risk
-
-### Entity-Level Analysis
-
-![Entity F1 Breakdown](results/figures/finetuned_entity_f1.png)
-
-**Top Performing Entities** (F1 > 95%):
-- CREDITCARD: 98.5%
-- PHONENUMBER: 98.2%
-- EMAIL: 97.8%
-- ACCOUNTNUMBER: 97.4%
-- SSN: 96.8%
-- USERNAME: 96.3%
-- PASSPORT: 95.7%
-
-**Challenging Entities** (F1 < 90%):
-- CITY: 87.3% (context-dependent)
-- STATE: 88.9% (ambiguous with general text)
-- ZIPCODE: 89.2% (format variations)
-
-**Insights:**
-- Structured PII (credit cards, phones, emails) near-perfect detection
-- Geographic entities harder due to context ambiguity
-- Model successfully learns diverse patterns across entity types
+**Challenging entities (F1 < 90%):**
+`CITY` 87.3% · `STATE` 88.9% · `ZIPCODE` 89.2% — harder due to context ambiguity and format variation.
 
 ---
 
 ## Demo Application
 
-### Streamlit Interactive Demo
-
-Launch the demo to test PII detection in real-time:
+An interactive Streamlit app for real-time PII detection with model comparison.
 
 ```bash
-# 1. Set up Modal authentication
+# 1. Authenticate with Modal
 uv run modal setup
 
-# 2. Launch Streamlit app
+# 2. Launch the demo
 uv run streamlit run app/streamlit_app.py
 ```
 
-### Features
+Open `http://localhost:8501` in your browser.
 
-- 📝 **Text Input**: Paste or type text containing potential PII
-- 🔀 **Model Selection**: Compare base vs fine-tuned model
-- ⚡ **Real-time Inference**: Fast GPU inference via Modal
-- 📊 **Detailed Results**: View detected entities, redacted text, and raw JSON
-- 🎨 **Visual Highlighting**: Color-coded entity types
-- ⏱️ **Performance Metrics**: Processing time and token counts
-
-### Demo Screenshot
-
-The demo provides:
-1. Side-by-side model comparison
-2. Interactive entity highlighting
-3. Downloadable redacted text
-4. JSON schema validation
-5. Processing statistics
+**Features:**
+- Paste or type text to detect PII instantly
+- Switch between base and fine-tuned model
+- View detected entity list, redacted text, and raw JSON
+- Side-by-side model comparison
+- Processing time and token count stats
 
 ---
 
@@ -296,44 +204,32 @@ The demo provides:
 
 ### Prerequisites
 
-- Python 3.12 or newer
-- [uv](https://docs.astral.sh/uv/) package manager
-- [Modal](https://modal.com) account (for cloud GPU inference)
-- HuggingFace account (for model access)
+| Requirement | Details |
+|-------------|---------|
+| Python | 3.12 or newer |
+| Package manager | [`uv`](https://docs.astral.sh/uv/) |
+| Cloud GPU | [Modal](https://modal.com) account |
+| Model hosting | [HuggingFace](https://huggingface.co) account |
 
-### 1. Clone Repository
+### Steps
 
 ```bash
-git clone https://github.com/yourusername/privacygaurd.git
+# 1. Clone the repository
+git clone https://github.com/rohitkr8527/privacygaurd.git
 cd privacygaurd
-```
 
-### 2. Install Dependencies
-
-```bash
-# Install uv if not already installed
+# 2. Install uv (if not already installed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Sync dependencies
+# 3. Sync project dependencies
 uv sync
-```
 
-### 3. Configure Modal
-
-```bash
-# Authenticate with Modal
+# 4. Authenticate with Modal
 uv run modal setup
 
-# Set Modal token in environment
-export MODAL_TOKEN_ID="your-token-id"
-export MODAL_TOKEN_SECRET="your-token-secret"
-```
-
-### 4. Set Up Environment Variables
-
-```bash
+# 5. Set up environment variables
 cp .env.example .env
-# Edit .env with your HuggingFace token if needed
+# Edit .env and add your HuggingFace token if needed
 ```
 
 ---
@@ -343,72 +239,44 @@ cp .env.example .env
 ### 1. Data Preparation
 
 ```bash
-# Inspect the OpenPII dataset
+# Inspect the dataset
 uv run python src/data/inspect_dataset.py
 
-# Prepare train/val/test splits
+# Create train/val/test splits → saved to data/processed/
 uv run python src/data/prepare_dataset.py
 ```
 
-Processed data will be saved to `data/processed/`.
-
 ### 2. Training (Optional)
 
-The model is already trained and available on HuggingFace. To retrain:
+The model is already published on HuggingFace. To retrain from scratch:
 
 ```bash
-# Launch training job on Modal (A100 GPU)
+# Launch training job on Modal L4 (~3 h, ~$3–5)
 uv run modal run training/train_modal.py
 ```
 
-**Note**: Training takes ~3 hours and costs ~$3-5 on Modal.
-
 ### 3. Evaluation
 
-#### Baseline Model Evaluation
-
 ```bash
+# Base model evaluation
 uv run modal run evaluation/baseline_modal.py
-```
 
-Results saved to `results/baseline_metrics.json` and `results/baseline_predictions.jsonl`.
-
-#### Fine-tuned Model Evaluation
-
-```bash
+# Fine-tuned model evaluation
 uv run modal run evaluation/finetuned_modal.py
-```
 
-Results saved to `results/finetuned_metrics.json` and `results/finetuned_predictions.jsonl`.
-
-#### External Benchmark Evaluation
-
-```bash
-# Prepare external benchmarks
+# External benchmark evaluation
 uv run python evaluation/prepare_external_benchmarks.py
-
-# Run evaluation on both models
 uv run modal run evaluation/external_eval_modal.py
-
-# Analyze results
 uv run python evaluation/analyze_external_results.py
-```
 
-#### Generate Visualizations
-
-```bash
+# Generate result figures
 uv run python evaluation/create_figures.py
 ```
 
-Figures saved to `results/figures/`.
-
-### 4. Error Analysis
+### 4. Error & Leakage Analysis
 
 ```bash
-# Detailed error analysis
 uv run python evaluation/error_analysis.py
-
-# Privacy leakage audit
 uv run python evaluation/audit_leakage.py
 ```
 
@@ -416,9 +284,8 @@ uv run python evaluation/audit_leakage.py
 
 ```bash
 uv run streamlit run app/streamlit_app.py
+# → http://localhost:8501
 ```
-
-Access the demo at `http://localhost:8501`.
 
 ---
 
@@ -426,140 +293,93 @@ Access the demo at `http://localhost:8501`.
 
 ```
 privacygaurd/
-├── app/                          # Demo application
-│   ├── streamlit_app.py         # Streamlit UI
-│   └── modal_inference.py       # Modal inference client
-├── data/                         # Data storage
-│   ├── processed/               # Prepared datasets
-│   └── external/                # External benchmarks
-├── docs/                         # Documentation
-│   └── architecture_diagrams.md # System architecture
-├── evaluation/                   # Evaluation scripts
-│   ├── baseline_modal.py        # Base model evaluation
-│   ├── finetuned_modal.py       # Fine-tuned evaluation
-│   ├── external_eval_modal.py   # External benchmarks
-│   ├── create_figures.py        # Visualization generation
-│   ├── error_analysis.py        # Error analysis
-│   └── metrics.py               # Metric calculations
-├── results/                      # Evaluation results
-│   ├── figures/                 # Generated charts
-│   └── external/                # External benchmark results
-├── src/                          # Source code
-│   └── data/                    # Data processing utilities
-├── training/                     # Training scripts
-│   └── train_modal.py           # Modal training job
-├── .env.example                  # Environment template
-├── .gitignore                    # Git ignore rules
-├── pyproject.toml               # Project dependencies
-├── README.md                     # This file
-└── uv.lock                      # Dependency lock file
+├── app/
+│   ├── streamlit_app.py          # Interactive Streamlit demo
+│   └── modal_inference.py        # Modal serverless inference client
+├── data/
+│   ├── processed/                # train.jsonl · val.jsonl · test.jsonl
+│   └── external/                 # gretel_test_1000.jsonl · nemotron_test_1000.jsonl
+├── docs/
+│   └── architecture_diagrams.md  # Full Mermaid architecture diagrams
+├── evaluation/
+│   ├── baseline_modal.py         # Base model evaluation (Modal)
+│   ├── finetuned_modal.py        # Fine-tuned model evaluation (Modal)
+│   ├── external_eval_modal.py    # External benchmark evaluation
+│   ├── prepare_external_benchmarks.py
+│   ├── metrics.py                # Precision · Recall · F1 · Leakage calculations
+│   ├── analyze_external_results.py
+│   ├── compare_results.py
+│   ├── error_analysis.py
+│   ├── audit_leakage.py
+│   └── create_figures.py         # Result visualisation generation
+├── results/
+│   ├── baseline_metrics.json
+│   ├── finetuned_metrics.json
+│   ├── baseline_vs_finetuned.json
+│   ├── entity_metrics.json
+│   ├── error_analysis.json
+│   ├── leakage_audit.json
+│   ├── external/                 # External benchmark results
+│   └── figures/                  # Generated PNG charts
+├── src/
+│   ├── data/
+│   │   ├── inspect_dataset.py
+│   │   └── prepare_dataset.py
+│   └── privacygaurd/
+│       └── __init__.py
+├── training/
+│   └── train_modal.py            # QLoRA fine-tuning job (Modal L4)
+├── .env.example
+├── pyproject.toml
+└── README.md
 ```
 
 ---
 
 ## Limitations
 
-### Current Limitations
+| Limitation | Detail |
+|------------|--------|
+| **Context window** | Max 2 048 tokens (~1 500 words). Long documents require chunking; cross-chunk entity resolution is not implemented. |
+| **Language** | Trained on English text only. Non-English and non-Latin script performance is not evaluated. |
+| **Domain shift** | ~9–10 pp F1 drop on external benchmarks vs in-domain. May need adaptation for specialised text. |
+| **Entity types** | Fixed to 18 predefined categories. Custom or emerging PII types require retraining. |
+| **Residual leakage** | 4.9% PII leakage rate. Not suitable for zero-tolerance environments without additional safeguards. |
+| **JSON dependency** | ~0.2% generation failures. Fallback parsing strategies recommended for critical applications. |
 
-1. **Context Window**: Limited to 2048 tokens (~1500 words)
-   - Long documents require chunking
-   - Cross-chunk entity resolution not implemented
-
-2. **Language**: Primarily trained on English text
-   - Performance on other languages not evaluated
-   - Non-Latin scripts may have lower accuracy
-
-3. **Domain Specificity**: Trained on OpenPII dataset
-   - 9-10% F1 drop on external benchmarks
-   - Domain adaptation may be needed for specialized text
-
-4. **Entity Types**: Limited to 18 predefined categories
-   - Custom entity types require retraining
-   - Emerging PII types (crypto addresses, social media) limited
-
-5. **False Negatives**: 4.9% PII leakage rate
-   - Not suitable for zero-tolerance privacy requirements
-   - Should be combined with additional safeguards
-
-6. **Structured Output**: Relies on JSON generation
-   - ~0.2% generation failures (recovered via parsing)
-   - May require fallback strategies for critical applications
-
-### Mitigation Strategies
-
-- **Chunking**: Implement sliding window for long documents
-- **Ensemble**: Combine with rule-based systems for critical entities
-- **Human Review**: Flag low-confidence predictions for manual review
-- **Continuous Training**: Periodically retrain on new PII patterns
-- **Multi-model**: Use multiple models for high-stakes applications
+**Recommended mitigations:** sliding-window chunking · ensemble with rule-based systems · human review for low-confidence predictions · periodic retraining · multi-model voting for high-stakes use cases.
 
 ---
 
 ## Future Work
 
-### Planned Improvements
-
-1. **Extended Context**: Support 8K+ token context windows
-2. **Multilingual**: Fine-tune on multilingual PII datasets
-3. **Hierarchical Entities**: Nested entity detection (e.g., address components)
-4. **Active Learning**: Incorporate human feedback loop
-5. **Model Compression**: Quantization for edge deployment
-6. **Batch API**: Async batch processing for large-scale applications
-7. **Confidence Scores**: Per-entity confidence estimation
-8. **Differential Privacy**: Formal privacy guarantees during training
-
-### Research Directions
-
-- Few-shot adaptation to new entity types
-- Cross-lingual transfer learning
-- Adversarial robustness testing
-- Fairness and bias analysis across demographics
-- Integration with knowledge graphs for context
-
----
-
-## Citation
-
-If you use PrivacyGuard in your research or applications, please cite:
-
-```bibtex
-@software{privacyguard2024,
-  title = {PrivacyGuard: Fine-tuned Language Model for PII Detection},
-  author = {Your Name},
-  year = {2024},
-  url = {https://github.com/yourusername/privacygaurd},
-  note = {Model: rohitkmr8527/privacyguard-qwen3-4b-qlora}
-}
-```
+- **Extended context**: Support 8 K+ token windows for long documents
+- **Multilingual**: Fine-tune on multilingual PII datasets
+- **Confidence scores**: Per-entity confidence estimation for flagging uncertain predictions
+- **Hierarchical entities**: Nested entity detection (e.g., address components)
+- **Model compression**: Quantised/distilled models for edge deployment
+- **Batch API**: Async batch processing for large-scale pipelines
+- **Active learning**: Human-in-the-loop feedback for continuous improvement
+- **Differential privacy**: Formal privacy guarantees during training
 
 ---
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License** — see [`LICENSE`](LICENSE) for details.
 
-**Model License**: The fine-tuned model inherits the [Qwen3 License](https://huggingface.co/Qwen/Qwen3-4B).
+**Model licence**: The fine-tuned adapter inherits the [Qwen3 Licence](https://huggingface.co/Qwen/Qwen3-4B).
 
 ---
 
 ## Acknowledgments
 
-- **Qwen Team**: For the excellent Qwen3-4B base model
-- **ai4privacy**: For the OpenPII dataset
-- **Modal**: For efficient cloud GPU infrastructure
-- **vLLM Team**: For fast inference engine
-- **HuggingFace**: For model hosting and transformers library
+- **Qwen Team** — Qwen3-4B base model
+- **ai4privacy** — OpenPII dataset
+- **Modal** — Cloud GPU infrastructure
+- **vLLM Team** — Fast inference engine
+- **HuggingFace** — Model hosting and transformers library
 
 ---
 
-## Contact
-
-For questions, issues, or collaboration:
-
-- **GitHub Issues**: [github.com/yourusername/privacygaurd/issues](https://github.com/yourusername/privacygaurd/issues)
-- **Email**: your.email@example.com
-- **Model**: [HuggingFace Hub](https://huggingface.co/rohitkmr8527/privacyguard-qwen3-4b-qlora)
-
----
-
-**Built with ❤️ for privacy-preserving AI**
+**Model on HuggingFace**: [rohitkmr8527/privacyguard-qwen3-4b-qlora](https://huggingface.co/rohitkmr8527/privacyguard-qwen3-4b-qlora)
