@@ -2,21 +2,29 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+*.pyc
 
 # Virtual environment
 .venv/
+venv/
+env/
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Environment variables
 .env
 .env.*
+!.env.example
 
 # Dataset files
 data/raw/*
@@ -34,10 +42,14 @@ data/processed/*
 checkpoints/
 models/
 
-# Evaluation artifacts
+# Evaluation artifacts - keep metrics but not predictions
 results/*.json
 results/*.jsonl
 results/*.csv
+
+# Keep generated figures
+!results/figures/*.png
+!results/figures/.gitkeep
 
 # W&B
 wandb/
@@ -48,3 +60,21 @@ results/**/*_predictions.jsonl
 
 # Generated external benchmark samples
 data/external/*.jsonl
+!data/external/benchmark_manifest.json
+
+# Temporary files
+*.tmp
+*.log
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# mypy
+.mypy_cache/
+
+# pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/

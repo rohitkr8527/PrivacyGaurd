@@ -1,0 +1,145 @@
+---- Stage 1 : Project Setup + Dataset Preparation ----
+
+1. initialize uv package manager
+    `uv init`
+
+2. create project folders by running setup.py
+    `uv run python setup.py`
+
+3. add basic packages
+    `uv add datasets pandas tqdm`
+
+4. inspect ai4privacy dataset
+    `uv run python src/data/inspect_dataset.py`
+    - inspect dataset schema and columns
+
+5. prepare dataset splits
+    `uv run python src/data/prepare_dataset.py`
+    - filter English samples
+    - shuffle with seed=42
+    - create train, validation and test splits
+    - validate entity spans
+    - save processed jsonl files
+    - verify no UID overlap
+
+
+---- Stage 2 : Baseline Qwen3-4B Evaluation ----
+
+1. add Modal
+    `uv add modal`
+    `uv run modal setup`
+
+2. create baseline evaluation script
+    `evaluation/baseline_modal.py`
+    - load Qwen3-4B
+    - run inference on Modal L4
+    - parse model output
+    - align entities to source text
+
+3. create evaluation metrics
+    `evaluation/metrics.py`
+    - exact span + entity type evaluation
+    - calculate evaluation metrics
+
+4. run baseline evaluation
+    `uv run modal run evaluation/baseline_modal.py --limit 3000`
+    - save results/baseline_predictions.jsonl
+    - save results/baseline_metrics.json
+
+
+---- Stage 3 : QLoRA Fine-Tuning Qwen3-4B ----
+
+1. create training script
+    `training/train_modal.py`
+    - configure QLoRA training
+    - use W&B tracking
+    - use Modal L4 GPU
+
+2. test training setup
+    `uv run modal run training/train_modal.py`
+    - run smoke tests
+    - test batch size and memory usage
+
+3. run full fine-tuning
+    `uv run modal run --detach training/train_modal.py --no-smoke-test --repo-id rohitkmr8527/privacyguard-qwen3-4b-qlora`
+    - train model
+    - save checkpoints in Modal Volume
+
+4. upload trained LoRA adapter
+    `rohitkmr8527/privacyguard-qwen3-4b-qlora`
+
+
+---- Stage 4 : Fine-Tuned Model Evaluation ----
+
+1. create fine-tuned evaluation script
+    `evaluation/finetuned_modal.py`
+    - load Qwen3-4B with trained LoRA adapter
+    - use same test data and evaluation setup as baseline
+
+2. run fine-tuned evaluation
+    `uv run modal run evaluation/finetuned_modal.py --limit 3000`
+
+3. compare baseline and fine-tuned model
+    `uv run python evaluation/compare_results.py`
+    - save results/baseline_vs_finetuned.json
+
+4. check train-test data leakage
+    `uv run python evaluation/audit_leakage.py`
+    - check UID overlap
+    - check exact text overlap
+    - check template overlap
+    - save results/leakage_audit.json
+
+
+---- Stage 5 : Generalization Evaluation + Error Analysis ----
+
+1. analyze OpenPII prediction errors
+    `uv run python evaluation/error_analysis.py`
+    - calculate per-entity metrics
+    - inspect false positives, false negatives and label confusion
+    - save results/entity_metrics.json
+    - save results/error_analysis.json
+
+2. prepare external benchmark datasets
+    `uv run python evaluation/prepare_external_benchmarks.py`
+    - prepare Gretel test samples
+    - prepare Nemotron-PII test samples
+    - map compatible labels
+    - save benchmark manifest
+
+3. evaluate base and fine-tuned models externally
+    `uv run modal run evaluation/external_eval_modal.py`
+    - evaluate on Gretel
+    - evaluate on Nemotron
+
+4. analyze external results
+    `uv run python evaluation/analyze_external_results.py`
+    - save generalization summary
+    - save external error analysis
+
+
+---- Stage 6 : PrivacyGuard Demo ----
+
+1. create Modal inference backend
+    `app/modal_inference.py`
+    - load Qwen3-4B with LoRA adapter
+    - detect PII
+    - align entities
+    - generate redacted text
+
+2. create Streamlit demo
+    `app/streamlit_app.py`
+    - add text input
+    - display detected entities
+    - display original and redacted text
+    - add redacted text download
+
+3. deploy Modal backend
+    `uv run modal deploy app/modal_inference.py`
+
+4. run Streamlit demo
+    `uv run streamlit run app/streamlit_app.py`
+
+5. generate result figures
+    `uv run python evaluation/create_figures.py`
+    - save figures to results/figures/
